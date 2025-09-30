@@ -79,13 +79,16 @@ impl VerifyChallenge for Mfa<'_> {
         ))?;
         let verify_response = self
             .workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<VerifyChallengeResponse>()
             .await?;
 

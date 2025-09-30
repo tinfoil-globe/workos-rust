@@ -51,12 +51,10 @@ impl GetDirectory for DirectorySync<'_> {
             .join(&format!("/directories/{id}", id = id))?;
         let directory = self
             .workos
-            .client()
-            .get(url)
-            .bearer_auth(self.workos.key())
-            .send()
+            .send(self.workos.client().get(url).bearer_auth(self.workos.key()))
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<Directory>()
             .await?;
 

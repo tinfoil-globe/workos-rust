@@ -66,12 +66,15 @@ impl DeleteOrganization for Organizations<'_> {
             .base_url()
             .join(&format!("/organizations/{id}", id = params.organization_id))?;
         self.workos
-            .client()
-            .delete(url)
-            .bearer_auth(self.workos.key())
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .delete(url)
+                    .bearer_auth(self.workos.key()),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?;
+            .handle_unauthorized_or_generic_error()
+            .await?;
 
         Ok(())
     }

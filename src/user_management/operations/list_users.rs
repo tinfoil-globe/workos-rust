@@ -73,13 +73,16 @@ impl ListUsers for UserManagement<'_> {
         let url = self.workos.base_url().join("/user_management/users")?;
         let users = self
             .workos
-            .client()
-            .get(url)
-            .query(&params)
-            .bearer_auth(self.workos.key())
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .get(url)
+                    .query(&params)
+                    .bearer_auth(self.workos.key()),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<PaginatedList<User>>()
             .await?;
 

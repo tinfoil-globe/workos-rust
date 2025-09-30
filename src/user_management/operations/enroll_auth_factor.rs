@@ -3,6 +3,7 @@ use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::core::response_to_request_error;
 use crate::mfa::{AuthenticationChallenge, AuthenticationFactor};
 use crate::user_management::{UserId, UserManagement};
 use crate::{ResponseExt, WorkOsError, WorkOsResult};
@@ -78,17 +79,16 @@ where
 #[async_trait]
 impl HandleEnrollAuthFactorError for Response {
     async fn handle_enroll_auth_factor_error(self) -> WorkOsResult<Self, EnrollAuthFactorError> {
-        match self.error_for_status_ref() {
-            Ok(_) => Ok(self),
-            Err(err) => match err.status() {
-                Some(StatusCode::BAD_REQUEST) => {
-                    let error = self.json::<EnrollAuthFactorError>().await?;
-
-                    Err(WorkOsError::Operation(error))
-                }
-                _ => Err(WorkOsError::RequestError(err)),
-            },
+        if self.status().is_success() {
+            return Ok(self);
         }
+
+        if self.status() == StatusCode::BAD_REQUEST {
+            let error = self.json::<EnrollAuthFactorError>().await?;
+            return Err(WorkOsError::Operation(error));
+        }
+
+        Err(response_to_request_error(self).await)
     }
 }
 
@@ -144,13 +144,16 @@ impl EnrollAuthFactor for UserManagement<'_> {
         ))?;
         let user = self
             .workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_error()?
+            .handle_unauthorized_error()
+            .await?
             .handle_enroll_auth_factor_error()
             .await?
             .json::<EnrollAuthFactorResponse>()

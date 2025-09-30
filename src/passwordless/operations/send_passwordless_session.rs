@@ -59,13 +59,16 @@ impl SendPasswordlessSession for Passwordless<'_> {
             .base_url()
             .join(&format!("/passwordless/sessions/{id}/send", id = params.id))?;
         self.workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?;
+            .handle_unauthorized_or_generic_error()
+            .await?;
 
         Ok(())
     }

@@ -70,13 +70,16 @@ impl UpdateExternalId for UserManagement<'_> {
 
         let user = self
             .workos
-            .client()
-            .put(url)
-            .bearer_auth(self.workos.key())
-            .json(&body)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .put(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&body),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<User>()
             .await?;
 

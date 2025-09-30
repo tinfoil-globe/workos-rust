@@ -58,12 +58,10 @@ impl GetUserIdentities for UserManagement<'_> {
 
         let users = self
             .workos
-            .client()
-            .get(url)
-            .bearer_auth(self.workos.key())
-            .send()
+            .send(self.workos.client().get(url).bearer_auth(self.workos.key()))
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<Vec<Identity>>()
             .await?;
 

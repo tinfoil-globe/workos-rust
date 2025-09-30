@@ -3,6 +3,7 @@ use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::core::response_to_request_error;
 use crate::user_management::{PasswordReset, UserManagement};
 use crate::{ResponseExt, WorkOsError, WorkOsResult};
 
@@ -49,17 +50,16 @@ impl HandleCreatePasswordResetError for Response {
     async fn handle_create_password_reset_error(
         self,
     ) -> WorkOsResult<Self, CreatePasswordResetError> {
-        match self.error_for_status_ref() {
-            Ok(_) => Ok(self),
-            Err(err) => match err.status() {
-                Some(StatusCode::NOT_FOUND) => {
-                    let error = self.json::<CreatePasswordResetError>().await?;
-
-                    Err(WorkOsError::Operation(error))
-                }
-                _ => Err(WorkOsError::RequestError(err)),
-            },
+        if self.status().is_success() {
+            return Ok(self);
         }
+
+        if self.status() == StatusCode::NOT_FOUND {
+            let error = self.json::<CreatePasswordResetError>().await?;
+            return Err(WorkOsError::Operation(error));
+        }
+
+        Err(response_to_request_error(self).await)
     }
 }
 
@@ -110,13 +110,16 @@ impl CreatePasswordReset for UserManagement<'_> {
             .join("/user_management/password_reset")?;
         let user = self
             .workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_error()?
+            .handle_unauthorized_error()
+            .await?
             .handle_create_password_reset_error()
             .await?
             .json::<PasswordReset>()

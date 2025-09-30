@@ -93,13 +93,16 @@ impl CreateUser for UserManagement<'_> {
         let url = self.workos.base_url().join("/user_management/users")?;
         let user = self
             .workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<User>()
             .await?;
 

@@ -3,6 +3,7 @@ use reqwest::{Response, StatusCode};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::core::response_to_request_error;
 use crate::{
     WorkOsError, WorkOsResult, mfa::AuthenticationFactorIdAndType,
     organizations::OrganizationIdAndName, sso::ConnectionId,
@@ -261,30 +262,31 @@ where
 #[async_trait]
 impl HandleAuthenticateError for Response {
     async fn handle_authenticate_error(self) -> WorkOsResult<Self, AuthenticateError> {
-        match self.error_for_status_ref() {
-            Ok(_) => Ok(self),
-            Err(err) => match err.status() {
-                Some(StatusCode::BAD_REQUEST) => {
-                    let authenticate_error = self.json::<AuthenticateError>().await?;
+        if self.status().is_success() {
+            return Ok(self);
+        }
 
-                    Err(match &authenticate_error {
-                        AuthenticateError::WithError(AuthenticateErrorWithError::Other {
-                            error,
-                            ..
-                        }) => match error.as_str() {
-                            "invalid_client" | "unauthorized_client" => WorkOsError::Unauthorized,
-                            _ => WorkOsError::Operation(authenticate_error),
-                        },
+        match self.status() {
+            StatusCode::BAD_REQUEST => {
+                let authenticate_error = self.json::<AuthenticateError>().await?;
+
+                Err(match &authenticate_error {
+                    AuthenticateError::WithError(AuthenticateErrorWithError::Other {
+                        error,
+                        ..
+                    }) => match error.as_str() {
+                        "invalid_client" | "unauthorized_client" => WorkOsError::Unauthorized,
                         _ => WorkOsError::Operation(authenticate_error),
-                    })
-                }
-                Some(StatusCode::FORBIDDEN) => {
-                    let authenticate_error = self.json::<AuthenticateError>().await?;
+                    },
+                    _ => WorkOsError::Operation(authenticate_error),
+                })
+            }
+            StatusCode::FORBIDDEN => {
+                let authenticate_error = self.json::<AuthenticateError>().await?;
 
-                    Err(WorkOsError::Operation(authenticate_error))
-                }
-                _ => Err(WorkOsError::RequestError(err)),
-            },
+                Err(WorkOsError::Operation(authenticate_error))
+            }
+            _ => Err(response_to_request_error(self).await),
         }
     }
 }

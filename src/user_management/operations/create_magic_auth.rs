@@ -70,13 +70,16 @@ impl CreateMagicAuth for UserManagement<'_> {
         let url = self.workos.base_url().join("/user_management/magic_auth")?;
         let user = self
             .workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<MagicAuth>()
             .await?;
 

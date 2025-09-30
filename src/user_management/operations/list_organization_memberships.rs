@@ -55,13 +55,16 @@ impl ListOrganizationMemberships for crate::user_management::UserManagement<'_> 
             .join("/user_management/organization_memberships")?;
         let memberships = self
             .workos
-            .client()
-            .get(url)
-            .bearer_auth(self.workos.key())
-            .query(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .get(url)
+                    .bearer_auth(self.workos.key())
+                    .query(&params),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<PaginatedList<OrganizationMembership>>()
             .await?;
 

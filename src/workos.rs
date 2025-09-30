@@ -1,7 +1,13 @@
+use std::time::Instant;
+
+use reqwest::{RequestBuilder, Response};
 use url::{ParseError, Url};
 
-use crate::ApiKey;
 use crate::admin_portal::AdminPortal;
+use crate::core::{
+    ResponseLogContext, extract_request_body, log_request, log_response_status,
+    log_response_success, sanitize_headers, store_response_context,
+};
 use crate::directory_sync::DirectorySync;
 use crate::mfa::Mfa;
 use crate::organizations::Organizations;
@@ -9,6 +15,7 @@ use crate::passwordless::Passwordless;
 use crate::roles::Roles;
 use crate::sso::Sso;
 use crate::user_management::UserManagement;
+use crate::{ApiKey, WorkOsResult};
 
 /// The WorkOS client.
 #[derive(Clone)]
@@ -39,6 +46,44 @@ impl WorkOs {
 
     pub(crate) fn client(&self) -> &reqwest::Client {
         &self.client
+    }
+
+    pub(crate) async fn send<E>(&self, builder: RequestBuilder) -> WorkOsResult<Response, E> {
+        let timer = Instant::now();
+        let request = builder.build()?;
+        let method = request.method().clone();
+        let url = request.url().clone();
+        let request_headers = sanitize_headers(request.headers());
+        let request_body = request.body().and_then(extract_request_body);
+        log_request(
+            method.as_str(),
+            &url,
+            &request_headers,
+            request_body.as_deref(),
+        );
+
+        let mut response = self.client.execute(request).await?;
+        let duration = timer.elapsed();
+        let status = response.status();
+        let response_headers = sanitize_headers(response.headers());
+
+        store_response_context(
+            &mut response,
+            ResponseLogContext {
+                method: method.clone(),
+                url: url.clone(),
+                response_headers: response_headers.clone(),
+                duration,
+            },
+        );
+
+        if status.is_success() {
+            log_response_success(method.as_str(), &url, status, &response_headers, duration);
+        } else {
+            log_response_status(method.as_str(), &url, status, &response_headers, duration);
+        }
+
+        Ok(response)
     }
 
     /// Returns an [`AdminPortal`] instance.

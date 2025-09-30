@@ -46,12 +46,10 @@ impl GetProfile for Sso<'_> {
         let url = self.workos.base_url().join("/sso/profile")?;
         let get_profile_response = self
             .workos
-            .client()
-            .get(url)
-            .bearer_auth(access_token)
-            .send()
+            .send(self.workos.client().get(url).bearer_auth(access_token))
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<Profile>()
             .await?;
 

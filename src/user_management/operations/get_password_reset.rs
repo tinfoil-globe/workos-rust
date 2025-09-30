@@ -57,12 +57,10 @@ impl GetPasswordReset for UserManagement<'_> {
             .join(&format!("/user_management/password_reset/{id}"))?;
         let organization = self
             .workos
-            .client()
-            .get(url)
-            .bearer_auth(self.workos.key())
-            .send()
+            .send(self.workos.client().get(url).bearer_auth(self.workos.key()))
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<PasswordReset>()
             .await?;
 

@@ -3,6 +3,9 @@ use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::core::{
+    build_request_error_from_body, response_context, response_to_request_error, sanitize_headers,
+};
 use crate::mfa::{AuthenticationFactor, Mfa};
 use crate::{ResponseExt, WorkOsError, WorkOsResult};
 
@@ -67,24 +70,38 @@ where
 #[async_trait]
 impl HandleEnrollFactorError for Response {
     async fn handle_enroll_factor_error(self) -> WorkOsResult<Self, EnrollFactorError> {
-        match self.error_for_status_ref() {
-            Ok(_) => Ok(self),
-            Err(err) => match err.status() {
-                Some(StatusCode::UNPROCESSABLE_ENTITY) => {
-                    let error = self.json::<WorkOsApiError>().await?;
+        if self.status().is_success() {
+            return Ok(self);
+        }
 
-                    Err(match error.code.as_str() {
-                        "invalid_phone_number" => {
-                            WorkOsError::Operation(EnrollFactorError::InvalidPhoneNumber {
-                                message: error.message,
-                            })
-                        }
-                        _ => WorkOsError::RequestError(err),
+        if self.status() == StatusCode::UNPROCESSABLE_ENTITY {
+            let context = response_context(&self);
+            let fallback_url = self.url().clone();
+            let fallback_headers = sanitize_headers(self.headers());
+            let error = self.json::<WorkOsApiError>().await?;
+            let body = serde_json::json!({
+                "code": error.code,
+                "message": error.message,
+            })
+            .to_string();
+
+            return Err(match error.code.as_str() {
+                "invalid_phone_number" => {
+                    WorkOsError::Operation(EnrollFactorError::InvalidPhoneNumber {
+                        message: error.message,
                     })
                 }
-                _ => Err(WorkOsError::RequestError(err)),
-            },
+                _ => build_request_error_from_body(
+                    context,
+                    &fallback_url,
+                    &fallback_headers,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    &body,
+                ),
+            });
         }
+
+        Err(response_to_request_error(self).await)
     }
 }
 
@@ -131,13 +148,16 @@ impl EnrollFactor for Mfa<'_> {
         let url = self.workos.base_url().join("/auth/factors/enroll")?;
         let factor = self
             .workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_error()?
+            .handle_unauthorized_error()
+            .await?
             .handle_enroll_factor_error()
             .await?
             .json::<AuthenticationFactor>()

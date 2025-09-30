@@ -91,13 +91,16 @@ impl UpdateOrganization for Organizations<'_> {
             .join(&format!("/organizations/{id}", id = params.organization_id))?;
         let organization = self
             .workos
-            .client()
-            .put(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .put(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<Organization>()
             .await?;
 

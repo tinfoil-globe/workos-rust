@@ -83,13 +83,16 @@ impl CreateOrganization for Organizations<'_> {
         let url = self.workos.base_url().join("/organizations")?;
         let organization = self
             .workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<Organization>()
             .await?;
 

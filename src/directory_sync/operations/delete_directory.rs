@@ -66,12 +66,15 @@ impl DeleteDirectory for DirectorySync<'_> {
             .base_url()
             .join(&format!("/directories/{id}", id = params.directory_id))?;
         self.workos
-            .client()
-            .delete(url)
-            .bearer_auth(self.workos.key())
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .delete(url)
+                    .bearer_auth(self.workos.key()),
+            )
             .await?
-            .handle_unauthorized_or_generic_error()?;
+            .handle_unauthorized_or_generic_error()
+            .await?;
 
         Ok(())
     }

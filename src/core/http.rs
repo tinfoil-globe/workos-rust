@@ -21,6 +21,16 @@ pub(crate) fn response_context(response: &Response) -> Option<ResponseLogContext
     response.extensions().get::<ResponseLogContext>().cloned()
 }
 
+pub(crate) fn collect_error_chain(err: &reqwest::Error) -> Vec<String> {
+    let mut chain = Vec::new();
+    let mut current: &(dyn std::error::Error + 'static) = err;
+    while let Some(source) = current.source() {
+        chain.push(source.to_string());
+        current = source;
+    }
+    chain
+}
+
 pub(crate) fn sanitize_headers(headers: &HeaderMap) -> Vec<(String, String)> {
     headers
         .iter()
@@ -94,6 +104,47 @@ pub(crate) fn log_request(
     body: Option<&str>,
 ) {
     let _ = (method, url, headers, body);
+}
+
+#[cfg(feature = "tracing")]
+pub(crate) fn log_request_failure(
+    method: &str,
+    url: &Url,
+    headers: &[(String, String)],
+    body: Option<&str>,
+    duration: Duration,
+    err: &reqwest::Error,
+    error_causes: &[String],
+) {
+    tracing::error!(
+        "request failed",
+        http.method = method,
+        http.url = %url,
+        http.headers = ?headers,
+        http.body = body.unwrap_or("<empty>"),
+        elapsed_ms = duration.as_millis(),
+        error = %err,
+        error.is_timeout = err.is_timeout(),
+        error.is_request = err.is_request(),
+        error.is_connect = err.is_connect(),
+        error.is_body = err.is_body(),
+        error.is_decode = err.is_decode(),
+        error.is_builder = err.is_builder(),
+        error_chain = ?error_causes,
+    );
+}
+
+#[cfg(not(feature = "tracing"))]
+pub(crate) fn log_request_failure(
+    method: &str,
+    url: &Url,
+    headers: &[(String, String)],
+    body: Option<&str>,
+    duration: Duration,
+    err: &reqwest::Error,
+    error_causes: &[String],
+) {
+    let _ = (method, url, headers, body, duration, err, error_causes);
 }
 
 #[cfg(feature = "tracing")]

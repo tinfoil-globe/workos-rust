@@ -15,7 +15,7 @@ use crate::passwordless::Passwordless;
 use crate::roles::Roles;
 use crate::sso::Sso;
 use crate::user_management::UserManagement;
-use crate::{ApiKey, WorkOsResult};
+use crate::{ApiKey, WorkOsError, WorkOsResult};
 
 /// The WorkOS client.
 #[derive(Clone)]
@@ -62,7 +62,23 @@ impl WorkOs {
             request_body.as_deref(),
         );
 
-        let mut response = self.client.execute(request).await?;
+        let mut response = match self.client.execute(request).await {
+            Ok(response) => response,
+            Err(err) => {
+                let duration = timer.elapsed();
+                let error_chain = crate::core::collect_error_chain(&err);
+                crate::core::log_request_failure(
+                    method.as_str(),
+                    &url,
+                    &request_headers,
+                    request_body.as_deref(),
+                    duration,
+                    &err,
+                    &error_chain,
+                );
+                return Err(WorkOsError::from(err));
+            }
+        };
         let duration = timer.elapsed();
         let status = response.status();
         let response_headers = sanitize_headers(response.headers());

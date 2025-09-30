@@ -25,10 +25,60 @@ pub(crate) fn collect_error_chain(err: &reqwest::Error) -> Vec<String> {
     let mut chain = Vec::new();
     let mut current: &(dyn std::error::Error + 'static) = err;
     while let Some(source) = current.source() {
-        chain.push(source.to_string());
+        let source_string = source.to_string();
+        if chain
+            .last()
+            .map(|prev| prev == &source_string)
+            .unwrap_or(false)
+        {
+            current = source;
+            continue;
+        }
+
+        chain.push(source_string);
         current = source;
     }
     chain
+}
+
+pub(crate) fn derive_error_hint(err: &reqwest::Error, chain: &[String]) -> Option<String> {
+    let mut messages = Vec::with_capacity(chain.len() + 1);
+    messages.push(err.to_string());
+    messages.extend(chain.iter().cloned());
+
+    let combined = messages.join(" | ").to_lowercase();
+
+    if err.is_timeout() || combined.contains("timed out") {
+        return Some("Connection timed out while contacting WorkOS".to_string());
+    }
+
+    if combined.contains("dns error")
+        || combined.contains("failed to lookup address information")
+        || combined.contains("failed to resolve")
+    {
+        return Some("DNS resolution failed for the WorkOS endpoint".to_string());
+    }
+
+    if combined.contains("connection refused") {
+        return Some("Remote host refused the TCP connection".to_string());
+    }
+
+    if combined.contains("certificate verify failed")
+        || combined.contains("unable to get local issuer certificate")
+    {
+        return Some(
+            "TLS certificate verification failed; ensure the trust store is available".to_string(),
+        );
+    }
+
+    if combined.contains("ossl_store_get0_loader_int") || combined.contains("unregistered scheme") {
+        return Some(
+            "OpenSSL certificate store loader is unavailable; check OpenSSL providers/config"
+                .to_string(),
+        );
+    }
+
+    None
 }
 
 pub(crate) fn sanitize_headers(headers: &HeaderMap) -> Vec<(String, String)> {
@@ -107,6 +157,7 @@ pub(crate) fn log_request(
 }
 
 #[cfg(feature = "tracing")]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn log_request_failure(
     method: &str,
     url: &Url,
@@ -115,26 +166,47 @@ pub(crate) fn log_request_failure(
     duration: Duration,
     err: &reqwest::Error,
     error_causes: &[String],
+    error_hint: Option<&str>,
 ) {
-    tracing::error!(
-        method = tracing::field::display(method),
-        url = tracing::field::display(url),
-        request_headers = tracing::field::debug(headers),
-        request_body = body.unwrap_or("<empty>"),
-        elapsed_ms = duration.as_millis(),
-        error = tracing::field::display(err),
-        error_is_timeout = err.is_timeout(),
-        error_is_request = err.is_request(),
-        error_is_connect = err.is_connect(),
-        error_is_body = err.is_body(),
-        error_is_decode = err.is_decode(),
-        error_is_builder = err.is_builder(),
-        error_chain = tracing::field::debug(error_causes),
-        "request failed"
-    );
+    match error_hint {
+        Some(hint) => tracing::error!(
+            method = tracing::field::display(method),
+            url = tracing::field::display(url),
+            request_headers = tracing::field::debug(headers),
+            request_body = body.unwrap_or("<empty>"),
+            elapsed_ms = duration.as_millis(),
+            error = tracing::field::display(err),
+            error_is_timeout = err.is_timeout(),
+            error_is_request = err.is_request(),
+            error_is_connect = err.is_connect(),
+            error_is_body = err.is_body(),
+            error_is_decode = err.is_decode(),
+            error_is_builder = err.is_builder(),
+            error_chain = tracing::field::debug(error_causes),
+            error_hint = tracing::field::display(hint),
+            "request failed"
+        ),
+        None => tracing::error!(
+            method = tracing::field::display(method),
+            url = tracing::field::display(url),
+            request_headers = tracing::field::debug(headers),
+            request_body = body.unwrap_or("<empty>"),
+            elapsed_ms = duration.as_millis(),
+            error = tracing::field::display(err),
+            error_is_timeout = err.is_timeout(),
+            error_is_request = err.is_request(),
+            error_is_connect = err.is_connect(),
+            error_is_body = err.is_body(),
+            error_is_decode = err.is_decode(),
+            error_is_builder = err.is_builder(),
+            error_chain = tracing::field::debug(error_causes),
+            "request failed"
+        ),
+    }
 }
 
 #[cfg(not(feature = "tracing"))]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn log_request_failure(
     method: &str,
     url: &Url,
@@ -143,8 +215,18 @@ pub(crate) fn log_request_failure(
     duration: Duration,
     err: &reqwest::Error,
     error_causes: &[String],
+    error_hint: Option<&str>,
 ) {
-    let _ = (method, url, headers, body, duration, err, error_causes);
+    let _ = (
+        method,
+        url,
+        headers,
+        body,
+        duration,
+        err,
+        error_causes,
+        error_hint,
+    );
 }
 
 #[cfg(feature = "tracing")]

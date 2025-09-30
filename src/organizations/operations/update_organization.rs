@@ -1,34 +1,33 @@
-use std::collections::HashSet;
-
 use async_trait::async_trait;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::organizations::{Organization, OrganizationId, Organizations};
-use crate::{ResponseExt, WorkOsError, WorkOsResult};
+use crate::organizations::{DomainData, Organization, OrganizationId, Organizations};
+use crate::{Metadata, ResponseExt, WorkOsError, WorkOsResult};
 
 /// The parameters for [`UpdateOrganization`].
 #[derive(Debug, Serialize)]
 pub struct UpdateOrganizationParams<'a> {
-    /// The ID of the organization passed in the URL.
+    /// The ID of the organization.
     #[serde(skip_serializing)]
     pub organization_id: &'a OrganizationId,
 
-    /// The name of the organization.
+    /// A descriptive name for the organization.
+    ///
+    /// This field does not need to be unique.
     pub name: Option<&'a str>,
 
-    /// Whether the connections within this organization should allow profiles
-    /// that do not have a domain that is present in the set of the organization's
-    /// user email domains.
-    ///
-    /// See [here](https://workos.com/docs/sso/guide/frequently-asked-questions#allow-profiles-outside-organization)
-    /// for more details.
-    pub allow_profiles_outside_organization: Option<&'a bool>,
-
     /// The domains of the organization.
-    ///
-    /// At least one domain is required unless `allow_profiles_outside_organization` is `true`.
-    pub domains: Option<HashSet<&'a str>>,
+    pub domain_data: Option<Vec<DomainData<'a>>>,
+
+    /// The Stripe customer ID associated with this organization.
+    pub stripe_customer_id: Option<&'a str>,
+
+    /// The external ID of the organization.
+    pub external_id: Option<&'a str>,
+
+    /// Object containing metadata key/value pairs associated with the organization.
+    pub metadata: Option<Metadata>,
 }
 
 /// An error returned from [`UpdateOrganization`].
@@ -44,29 +43,38 @@ impl From<UpdateOrganizationError> for WorkOsError<UpdateOrganizationError> {
 /// [WorkOS Docs: Update an Organization](https://workos.com/docs/reference/organization/update)
 #[async_trait]
 pub trait UpdateOrganization {
-    /// Update an [`Organization`].
+    /// Updates an organization in the current environment.
     ///
     /// [WorkOS Docs: Update an Organization](https://workos.com/docs/reference/organization/update)
     ///
     /// # Examples
     ///
     /// ```
-    /// use std::collections::HashSet;
+    /// use std::collections::HashMap;
     ///
     /// # use workos_sdk::WorkOsResult;
     /// # use workos_sdk::organizations::*;
-    /// use workos_sdk::{ApiKey, WorkOs};
+    /// use workos_sdk::{ApiKey, Metadata, WorkOs};
     ///
     /// # async fn run() -> WorkOsResult<(), UpdateOrganizationError> {
     /// let workos = WorkOs::new(&ApiKey::from("sk_example_123456789"));
+    /// let metadata = Metadata(HashMap::from([(
+    ///     "tier".to_string(),
+    ///     "diamond".to_string(),
+    /// )]));
     ///
     /// let organization = workos
     ///     .organizations()
     ///     .update_organization(&UpdateOrganizationParams {
     ///         organization_id: &OrganizationId::from("org_01EHZNVPK3SFK441A1RGBFSHRT"),
     ///         name: Some("Foo Corp"),
-    ///         allow_profiles_outside_organization: None,
-    ///         domains: Some(HashSet::from(["foo-corp.com"])),
+    ///         domain_data: Some(vec![DomainData {
+    ///             domain: "foo-corp.com",
+    ///             state: DomainDataState::Verified,
+    ///         }]),
+    ///         stripe_customer_id: Some("cus_R9qWAGMQ6nGE7V"),
+    ///         external_id: Some("2fe01467-f7ea-4dd2-8b79-c2b4f56d0191"),
+    ///         metadata: Some(metadata),
     ///     })
     ///     .await?;
     /// # Ok(())
@@ -80,7 +88,6 @@ pub trait UpdateOrganization {
 
 #[async_trait]
 impl UpdateOrganization for Organizations<'_> {
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     async fn update_organization(
         &self,
         params: &UpdateOrganizationParams<'_>,
@@ -89,15 +96,14 @@ impl UpdateOrganization for Organizations<'_> {
             .workos
             .base_url()
             .join(&format!("/organizations/{id}", id = params.organization_id))?;
+
         let organization = self
             .workos
-            .send(
-                self.workos
-                    .client()
-                    .put(url)
-                    .bearer_auth(self.workos.key())
-                    .json(&params),
-            )
+            .client()
+            .put(url)
+            .bearer_auth(self.workos.key())
+            .json(&params)
+            .send()
             .await?
             .handle_unauthorized_or_generic_error()
             .await?
@@ -110,11 +116,13 @@ impl UpdateOrganization for Organizations<'_> {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use serde_json::json;
     use tokio;
 
-    use crate::organizations::OrganizationId;
-    use crate::{ApiKey, WorkOs};
+    use crate::organizations::{DomainData, DomainDataState, OrganizationId};
+    use crate::{ApiKey, Metadata, WorkOs};
 
     use super::*;
 
@@ -137,13 +145,24 @@ mod test {
                     "object": "organization",
                     "name": "Foo Corp",
                     "allow_profiles_outside_organization": false,
+                    "stripe_customer_id": "cus_R9qWAGMQ6nGE7V",
+                    "external_id": "2fe01467-f7ea-4dd2-8b79-c2b4f56d0191",
+                    "metadata": {
+                        "tier": "diamond"
+                    },
                     "created_at": "2021-06-25T19:07:33.155Z",
                     "updated_at": "2021-06-25T19:07:33.155Z",
                     "domains": [
-                        {
-                            "domain": "foo-corp.com",
+                         {
+                            "object": "organization_domain",
                             "id": "org_domain_01EHZNVPK2QXHMVWCEDQEKY69A",
-                            "object": "organization_domain"
+                            "domain": "foo-corp.com",
+                            "organization_id": "org_01EHZNVPK3SFK441A1RGBFSHRT",
+                            "state": "verified",
+                            "verification_strategy": "dns",
+                            "verification_token": "m5Oztg3jdK4NJLgs8uIlIprMw",
+                            "created_at": "2021-06-25T19:07:33.155Z",
+                            "updated_at": "2021-06-25T19:07:33.155Z"
                         }
                     ]
                 })
@@ -152,13 +171,23 @@ mod test {
             .create_async()
             .await;
 
+        let metadata = Metadata(HashMap::from([(
+            "tier".to_string(),
+            "diamond".to_string(),
+        )]));
+
         let organization = workos
             .organizations()
             .update_organization(&UpdateOrganizationParams {
                 organization_id: &OrganizationId::from("org_01EHZNVPK3SFK441A1RGBFSHRT"),
                 name: Some("Foo Corp"),
-                allow_profiles_outside_organization: Some(&false),
-                domains: Some(HashSet::from(["foo-corp.com"])),
+                domain_data: Some(vec![DomainData {
+                    domain: "foo-corp.com",
+                    state: DomainDataState::Verified,
+                }]),
+                stripe_customer_id: Some("cus_R9qWAGMQ6nGE7V"),
+                external_id: Some("2fe01467-f7ea-4dd2-8b79-c2b4f56d0191"),
+                metadata: Some(metadata),
             })
             .await
             .unwrap();

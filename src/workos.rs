@@ -67,6 +67,7 @@ impl WorkOs {
             Err(err) => {
                 let duration = timer.elapsed();
                 let error_chain = crate::core::collect_error_chain(&err);
+                let error_hint = crate::core::derive_error_hint(&err, &error_chain);
                 crate::core::log_request_failure(
                     method.as_str(),
                     &url,
@@ -75,6 +76,7 @@ impl WorkOs {
                     duration,
                     &err,
                     &error_chain,
+                    error_hint.as_deref(),
                 );
                 return Err(WorkOsError::from(err));
             }

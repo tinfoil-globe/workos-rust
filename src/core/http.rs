@@ -88,11 +88,11 @@ pub(crate) fn log_request(
     body: Option<&str>,
 ) {
     tracing::debug!(
-        "sending request",
-        http.method = method,
-        http.url = %url,
-        http.headers = ?headers,
-        http.body = body.unwrap_or("<empty>")
+        method = tracing::field::display(method),
+        url = tracing::field::display(url),
+        request_headers = tracing::field::debug(headers),
+        request_body = body.unwrap_or("<empty>"),
+        "sending request"
     );
 }
 
@@ -117,20 +117,20 @@ pub(crate) fn log_request_failure(
     error_causes: &[String],
 ) {
     tracing::error!(
-        "request failed",
-        http.method = method,
-        http.url = %url,
-        http.headers = ?headers,
-        http.body = body.unwrap_or("<empty>"),
+        method = tracing::field::display(method),
+        url = tracing::field::display(url),
+        request_headers = tracing::field::debug(headers),
+        request_body = body.unwrap_or("<empty>"),
         elapsed_ms = duration.as_millis(),
-        error = %err,
-        error.is_timeout = err.is_timeout(),
-        error.is_request = err.is_request(),
-        error.is_connect = err.is_connect(),
-        error.is_body = err.is_body(),
-        error.is_decode = err.is_decode(),
-        error.is_builder = err.is_builder(),
-        error_chain = ?error_causes,
+        error = tracing::field::display(err),
+        error_is_timeout = err.is_timeout(),
+        error_is_request = err.is_request(),
+        error_is_connect = err.is_connect(),
+        error_is_body = err.is_body(),
+        error_is_decode = err.is_decode(),
+        error_is_builder = err.is_builder(),
+        error_chain = tracing::field::debug(error_causes),
+        "request failed"
     );
 }
 
@@ -156,12 +156,12 @@ pub(crate) fn log_response_success(
     duration: Duration,
 ) {
     tracing::debug!(
-        "received response",
-        http.method = method,
-        http.url = %url,
-        http.status = %status,
-        http.headers = ?headers,
-        elapsed_ms = duration.as_millis()
+        method = tracing::field::display(method),
+        url = tracing::field::display(url),
+        status = tracing::field::display(status),
+        response_headers = tracing::field::debug(headers),
+        elapsed_ms = duration.as_millis(),
+        "received response"
     );
 }
 
@@ -185,12 +185,12 @@ pub(crate) fn log_response_status(
     duration: Duration,
 ) {
     tracing::debug!(
-        "received non-success response",
-        http.method = method,
-        http.url = %url,
-        http.status = %status,
-        http.headers = ?headers,
-        elapsed_ms = duration.as_millis()
+        method = tracing::field::display(method),
+        url = tracing::field::display(url),
+        status = tracing::field::display(status),
+        response_headers = tracing::field::debug(headers),
+        elapsed_ms = duration.as_millis(),
+        "received non-success response"
     );
 }
 
@@ -214,12 +214,12 @@ pub(crate) fn log_response_unauthorized(
     duration: Duration,
 ) {
     tracing::warn!(
-        "unauthorized response",
-        http.method = method,
-        http.url = %url,
-        http.status = %status,
-        http.headers = ?headers,
-        elapsed_ms = duration.as_millis()
+        method = tracing::field::display(method),
+        url = tracing::field::display(url),
+        status = tracing::field::display(status),
+        response_headers = tracing::field::debug(headers),
+        elapsed_ms = duration.as_millis(),
+        "unauthorized response"
     );
 }
 
@@ -244,13 +244,13 @@ pub(crate) fn log_response_error_with_body(
     duration: Duration,
 ) {
     tracing::error!(
-        "error response",
-        http.method = method,
-        http.url = %url,
-        http.status = %status,
-        http.headers = ?headers,
-        http.body = body,
-        elapsed_ms = duration.as_millis()
+        method = tracing::field::display(method),
+        url = tracing::field::display(url),
+        status = tracing::field::display(status),
+        response_headers = tracing::field::debug(headers),
+        response_body = body,
+        elapsed_ms = duration.as_millis(),
+        "error response"
     );
 }
 
@@ -276,13 +276,13 @@ pub(crate) fn log_response_error_body_failed(
     duration: Duration,
 ) {
     tracing::error!(
-        "error response (body unavailable)",
-        http.method = method,
-        http.url = %url,
-        http.status = %status,
-        http.headers = ?headers,
-        error,
-        elapsed_ms = duration.as_millis()
+        method = tracing::field::display(method),
+        url = tracing::field::display(url),
+        status = tracing::field::display(status),
+        response_headers = tracing::field::debug(headers),
+        error = tracing::field::display(error),
+        elapsed_ms = duration.as_millis(),
+        "error response (body unavailable)"
     );
 }
 

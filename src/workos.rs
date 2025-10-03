@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use reqwest::{RequestBuilder, Response};
+use reqwest::{header::RETRY_AFTER, RequestBuilder, Response, StatusCode};
 use url::{ParseError, Url};
 
 use crate::admin_portal::AdminPortal;
@@ -101,6 +101,16 @@ impl WorkOs {
             log_response_status(method.as_str(), &url, status, &response_headers, duration);
         }
 
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            let retry_after = response
+                .headers()
+                .get(RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<f32>().ok());
+
+            return Err(WorkOsError::RateLimited { retry_after });
+        }
+
         Ok(response)
     }
 
@@ -190,6 +200,7 @@ impl<'a> WorkOsBuilder<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use matches::assert_matches;
 
     #[test]
     fn it_supports_setting_the_base_url_through_the_builder() {
@@ -238,5 +249,34 @@ mod test {
         let response_body = response.text().await.unwrap();
 
         assert_eq!(response_body, "User-Agent correctly set")
+    }
+
+    #[tokio::test]
+    async fn it_returns_a_rate_limited_error_with_retry_after() {
+        let mut server = mockito::Server::new_async().await;
+
+        let workos = WorkOs::builder(&ApiKey::from("sk_example_123456789"))
+            .base_url(&server.url())
+            .unwrap()
+            .build();
+
+        server
+            .mock("GET", "/rate-limited")
+            .with_status(429)
+            .with_header("Retry-After", "1.5")
+            .create_async()
+            .await;
+
+        let url = workos.base_url().join("/rate-limited").unwrap();
+        let result = workos
+            .send::<()>(workos.client().get(url))
+            .await;
+
+        assert_matches!(
+            result,
+            Err(WorkOsError::RateLimited {
+                retry_after: Some(value),
+            }) if (value - 1.5).abs() < f32::EPSILON
+        );
     }
 }

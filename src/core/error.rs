@@ -70,6 +70,13 @@ pub enum WorkOsError<E> {
     #[error("unauthorized")]
     Unauthorized,
 
+    /// The request was rate limited by the WorkOS API.
+    #[error("rate limited")]
+    RateLimited {
+        /// Seconds until the request may be retried, if provided by the API.
+        retry_after: Option<f32>,
+    },
+
     /// An error occurred while parsing a URL.
     #[error("URL parse error")]
     UrlParseError(#[from] url::ParseError),

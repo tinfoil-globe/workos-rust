@@ -171,10 +171,7 @@ mod test {
             .create_async()
             .await;
 
-        let metadata = Metadata(HashMap::from([(
-            "tier".to_string(),
-            "diamond".to_string(),
-        )]));
+        let metadata = Metadata(HashMap::from([("tier".to_string(), "diamond".to_string())]));
 
         let organization = workos
             .organizations()

@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use async_trait::async_trait;
 use serde::Serialize;
 use thiserror::Error;
@@ -14,14 +12,13 @@ pub struct CreateOrganizationParams<'a> {
     ///
     /// This field does not need to be unique.
     pub name: &'a str,
-    pub allow_profiles_outside_organization: Option<&'a bool>,
 
     /// The domains of the organization.
-    ///
-    /// At least one domain is required unless `allow_profiles_outside_organization` is `true`.
-    pub domains: HashSet<&'a str>,
+    pub domain_data: Vec<DomainData<'a>>,
 
+    /// The external ID of the organization.
     pub external_id: Option<&'a str>,
+
     /// Object containing metadata key/value pairs associated with the organization.
     pub metadata: Option<Metadata>,
 }
@@ -161,7 +158,10 @@ mod test {
             .create_async()
             .await;
 
-        let metadata = Metadata(HashMap::from([("tier".to_string(), "diamond".to_string())]));
+        let metadata = Metadata(HashMap::from([(
+            "tier".to_string(),
+            "diamond".to_string(),
+        )]));
 
         let organization = workos
             .organizations()

@@ -44,11 +44,11 @@ pub trait CreateOrganizationMembership {
     /// # Examples
     ///
     /// ```
-    /// # use workos::WorkOsResult;
-    /// # use workos::organizations::OrganizationId;
-    /// # use workos::roles::RoleSlug;
-    /// # use workos::user_management::*;
-    /// use workos::{ApiKey, WorkOs};
+    /// # use workos_sdk::WorkOsResult;
+    /// # use workos_sdk::organizations::OrganizationId;
+    /// # use workos_sdk::roles::RoleSlug;
+    /// # use workos_sdk::user_management::*;
+    /// use workos_sdk::{ApiKey, WorkOs};
     ///
     /// # async fn run() -> WorkOsResult<(), CreateOrganizationMembershipError> {
     /// let workos = WorkOs::new(&ApiKey::from("sk_example_123456789"));
@@ -79,17 +79,19 @@ impl CreateOrganizationMembership for UserManagement<'_> {
         let url = self
             .workos
             .base_url()
-            .join("/user_management/organization_membership")?;
+            .join("/user_management/organization_memberships")?;
         let organization_membership = self
             .workos
-            .client()
-            .post(url)
-            .bearer_auth(self.workos.key())
-            .json(&params)
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .post(url)
+                    .bearer_auth(self.workos.key())
+                    .json(&params),
+            )
             .await?
             .handle_unauthorized_or_generic_error()
-            ?
+            .await?
             .json::<OrganizationMembership>()
             .await?;
 
@@ -117,7 +119,7 @@ mod test {
             .build();
 
         server
-            .mock("POST", "/user_management/organization_membership")
+            .mock("POST", "/user_management/organization_memberships")
             .match_header("Authorization", "Bearer sk_example_123456789")
             .with_status(201)
             .with_body(

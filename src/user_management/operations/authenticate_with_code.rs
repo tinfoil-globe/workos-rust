@@ -103,10 +103,7 @@ impl AuthenticateWithCode for UserManagement<'_> {
 
         let authenticate_with_code_response = self
             .workos
-            .client()
-            .post(url)
-            .json(&body)
-            .send()
+            .send(self.workos.client().post(url).json(&body))
             .await?
             .handle_authenticate_error()
             .await?

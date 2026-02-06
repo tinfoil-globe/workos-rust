@@ -36,10 +36,10 @@ pub trait ListOrganizationRoles {
     /// # Examples
     ///
     /// ```
-    /// # use workos::WorkOsResult;
-    /// # use workos::roles::*;
-    /// use workos::{ApiKey, WorkOs};
-    /// use workos::organizations::OrganizationId;
+    /// # use workos_sdk::WorkOsResult;
+    /// # use workos_sdk::roles::*;
+    /// use workos_sdk::{ApiKey, WorkOs};
+    /// use workos_sdk::organizations::OrganizationId;
     ///
     /// # async fn run() -> WorkOsResult<(), ListOrganizationRolesError> {
     /// let workos = WorkOs::new(&ApiKey::from("sk_example_123456789"));
@@ -74,14 +74,16 @@ impl ListOrganizationRoles for Roles<'_> {
 
         let roles = self
             .workos
-            .client()
-            .get(url)
-            .query(&params)
-            .bearer_auth(self.workos.key())
-            .send()
+            .send(
+                self.workos
+                    .client()
+                    .get(url)
+                    .query(&params)
+                    .bearer_auth(self.workos.key()),
+            )
             .await?
             .handle_unauthorized_or_generic_error()
-            ?
+            .await?
             .json::<UnpaginatedList<Role>>()
             .await?;
 

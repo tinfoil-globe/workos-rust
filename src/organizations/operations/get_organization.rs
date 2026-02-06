@@ -57,12 +57,10 @@ impl GetOrganization for Organizations<'_> {
             .join(&format!("/organizations/{id}", id = id))?;
         let organization = self
             .workos
-            .client()
-            .get(url)
-            .bearer_auth(self.workos.key())
-            .send()
+            .send(self.workos.client().get(url).bearer_auth(self.workos.key()))
             .await?
-            .handle_unauthorized_or_generic_error()?
+            .handle_unauthorized_or_generic_error()
+            .await?
             .json::<Organization>()
             .await?;
 

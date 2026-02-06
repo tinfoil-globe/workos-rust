@@ -103,10 +103,7 @@ impl AuthenticateWithPassword for UserManagement<'_> {
 
         let authenticate_with_password_response = self
             .workos
-            .client()
-            .post(url)
-            .json(&body)
-            .send()
+            .send(self.workos.client().post(url).json(&body))
             .await?
             .handle_authenticate_error()
             .await?

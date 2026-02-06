@@ -48,11 +48,10 @@ impl GetJwks for UserManagement<'_> {
 
         let jwks = self
             .workos
-            .client()
-            .get(url)
-            .send()
+            .send(self.workos.client().get(url))
             .await?
-            .handle_generic_error()?
+            .handle_generic_error()
+            .await?
             .json::<JwkSet>()
             .await?;
 

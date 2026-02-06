@@ -3,6 +3,7 @@ use reqwest::{Response, StatusCode};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::core::response_to_request_error;
 use crate::sso::{AccessToken, AuthorizationCode, ClientId, Profile, Sso};
 use crate::{WorkOsError, WorkOsResult};
 
@@ -53,20 +54,20 @@ impl HandleGetProfileAndTokenError for Response {
     async fn handle_get_profile_and_token_error(
         self,
     ) -> WorkOsResult<Self, GetProfileAndTokenError> {
-        match self.error_for_status_ref() {
-            Ok(_) => Ok(self),
-            Err(err) => match err.status() {
-                Some(StatusCode::BAD_REQUEST) => {
-                    let error = self.json::<GetProfileAndTokenError>().await?;
-
-                    Err(match error.error.as_str() {
-                        "invalid_client" | "unauthorized_client" => WorkOsError::Unauthorized,
-                        _ => WorkOsError::Operation(error),
-                    })
-                }
-                _ => Err(WorkOsError::RequestError(err)),
-            },
+        if self.status().is_success() {
+            return Ok(self);
         }
+
+        if self.status() == StatusCode::BAD_REQUEST {
+            let error = self.json::<GetProfileAndTokenError>().await?;
+
+            return Err(match error.error.as_str() {
+                "invalid_client" | "unauthorized_client" => WorkOsError::Unauthorized,
+                _ => WorkOsError::Operation(error),
+            });
+        }
+
+        Err(response_to_request_error(self).await)
     }
 }
 
@@ -119,10 +120,7 @@ impl GetProfileAndToken for Sso<'_> {
         ];
         let get_profile_and_token_response = self
             .workos
-            .client()
-            .post(url)
-            .form(&params)
-            .send()
+            .send(self.workos.client().post(url).form(&params))
             .await?
             .handle_get_profile_and_token_error()
             .await?

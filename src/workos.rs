@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use reqwest::{header::RETRY_AFTER, RequestBuilder, Response, StatusCode};
+use reqwest::{RequestBuilder, Response, StatusCode, header::RETRY_AFTER};
 use url::{ParseError, Url};
 
 use crate::admin_portal::AdminPortal;
@@ -268,9 +268,7 @@ mod test {
             .await;
 
         let url = workos.base_url().join("/rate-limited").unwrap();
-        let result = workos
-            .send::<()>(workos.client().get(url))
-            .await;
+        let result = workos.send::<()>(workos.client().get(url)).await;
 
         assert_matches!(
             result,
